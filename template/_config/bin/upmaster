@@ -50,7 +50,7 @@ git show-ref --verify --quiet refs/remotes/origin/master || {
     exit 1
 }
 git show-ref --verify --quiet "refs/remotes/origin/$student" || {
-    echo "ERROR: origin/$student does not exist. The class bootstrap must create it first." >&2
+    echo "ERROR: origin/$student does not exist. Publish this branch once with git pub first." >&2
     exit 1
 }
 

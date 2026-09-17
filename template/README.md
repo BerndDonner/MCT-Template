@@ -143,21 +143,32 @@ The VS Code Stage/Commit/Push UI can be used instead.
 
 ## Student branch bootstrap
 
-Student branches are created before first use and initially point to the same
-commit as `master`. For example:
+The VM image is provisioned from the public GitHub mirror. The clone names that
+remote `github`; Forgejo is then added as `origin`. No Forgejo credentials are
+needed while the image is built.
+
+The student's local branch is created directly from the common `master`
+starting point:
 
 ```bash
-git push origin master:refs/heads/huber
+git switch -c huber master
 ```
 
-After cloning/checking out `huber`, `bash _config/setup.sh` creates the local empty
-`huber/` directory. Git does not track empty directories, so there is no
-special "first student commit". The first real file under `huber/` is checked
-by exactly the same pre-commit rule as every later commit.
+`bash _config/setup.sh` then creates the local empty `huber/` directory. Git
+does not track empty directories, so there is no special "first student
+commit". The first real file under `huber/` is checked by exactly the same
+pre-commit rule as every later commit.
 
-Branch creation and Forgejo `master` protection are intended to become part of
-the later class-bootstrap automation; they are not hard-coded into this clean
-base repository.
+The remote branch `origin/huber` deliberately does **not** exist yet. The
+student publishes it under their own Forgejo identity on first use with:
+
+```bash
+git pub
+```
+
+That first publish creates `origin/huber` and sets it as the upstream. Until
+then, `git upmaster` is intentionally unavailable because it requires the
+student's remote branch.
 
 ## Repository layout
 
@@ -175,7 +186,7 @@ base repository.
 │   ├── settings.student.json.in
 │   ├── settings.teacher.json
 │   ├── launch.json
-│   └── config.yaml
+│   └── continue/config.yaml
 ├── donner/
 │   └── .gitkeep
 ├── .gitignore
