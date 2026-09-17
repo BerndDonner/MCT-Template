@@ -1,0 +1,33 @@
+# @REPO_NAME@ project-specific Git configuration.
+# Installed once per clone by:
+#   bash _config/setup.sh
+#
+# Generic recovery aliases live in NixOS-Bunny. This file contains only
+# course-specific policy and aliases.
+
+[core]
+    hooksPath = _config/hooks
+
+[pull]
+    rebase = false
+    ff = only
+
+[rebase]
+    autoStash = false
+
+[merge]
+    conflictStyle = diff3
+
+[rerere]
+    enabled = true
+
+[alias]
+    # MCT classroom update: synchronize the student's own remote branch,
+    # rebase it onto origin/master, validate the path invariant and publish
+    # the rewritten branch with --force-with-lease.
+    upmaster = "!bash _config/bin/upmaster"
+
+    # Teacher recovery tool for a badly polluted student branch. It preserves
+    # the current student folder, creates a rescue branch, rebuilds the branch
+    # on origin/master and republishes it with --force-with-lease.
+    repair-student = "!bash _config/bin/repair-student"

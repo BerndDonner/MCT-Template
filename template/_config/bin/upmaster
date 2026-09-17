@@ -1,0 +1,77 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "ERROR: not inside a Git repository." >&2
+    exit 1
+}
+cd "$root"
+
+student=$(git config --get mct.student 2>/dev/null || true)
+if [[ -z "$student" || "$student" == "UNCONFIGURED" ]]; then
+    echo "ERROR: mct.student is not configured." >&2
+    echo "       Run ./_config/setup.sh --student <forgejo-login> on non-Bunny machines." >&2
+    exit 1
+fi
+
+if [[ "$student" == "donner" ]]; then
+    echo "ERROR: git upmaster is a student-branch command and is disabled for mct.student=donner." >&2
+    echo "       The teacher updates master directly." >&2
+    exit 1
+fi
+
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+if [[ -z "$branch" ]]; then
+    echo "ERROR: detached HEAD; expected branch '$student'." >&2
+    exit 1
+fi
+if [[ "$branch" != "$student" ]]; then
+    echo "ERROR: current branch is '$branch'; this machine belongs to '$student'." >&2
+    exit 1
+fi
+
+upstream=$(git rev-parse --abbrev-ref --symbolic-full-name '@{u}' 2>/dev/null || true)
+if [[ "$upstream" != "origin/$student" ]]; then
+    echo "ERROR: upstream is '${upstream:-<none>}', expected 'origin/$student'." >&2
+    exit 1
+fi
+
+# No hidden autostash magic. A lesson starts from a deliberately clean state.
+if [[ -n "$(git status --porcelain)" ]]; then
+    echo "ERROR: Working tree is not clean." >&2
+    echo "       Commit, discard or inspect the changes before git upmaster." >&2
+    exit 1
+fi
+
+git fetch origin --prune
+
+git show-ref --verify --quiet refs/remotes/origin/master || {
+    echo "ERROR: origin/master does not exist." >&2
+    exit 1
+}
+git show-ref --verify --quiet "refs/remotes/origin/$student" || {
+    echo "ERROR: origin/$student does not exist. The class bootstrap must create it first." >&2
+    exit 1
+}
+
+# Validate both sides before rewriting anything. This catches old accidental
+# edits in donner/, root files, etc., even when a later commit reverted them.
+_config/bin/check-student-history origin/master "origin/$student" "$student"
+_config/bin/check-student-history origin/master HEAD "$student"
+
+# First reconcile work done on another machine, then move the complete student
+# work onto the current lesson state from master.
+git rebase "origin/$student"
+git rebase origin/master
+
+# Re-check the resulting history before publishing it.
+_config/bin/check-student-history origin/master HEAD "$student"
+
+git push --force-with-lease origin "HEAD:refs/heads/$student"
+
+# The empty local work directory is intentionally untracked until the student
+# creates the first file. Refresh local VS Code protection after every update.
+mkdir -p "$student"
+bash _config/setup.sh --refresh
+
+echo "OK: '$student' is up to date with origin/master and origin/$student."

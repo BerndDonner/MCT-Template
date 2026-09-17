@@ -1,0 +1,24 @@
+{
+    "files.exclude": {
+        "**/.git": false
+    },
+    "files.readonlyInclude": {
+        "**": true
+    },
+    "files.readonlyExclude": {
+        "__MCT_STUDENT__": true,
+        "__MCT_STUDENT__/**": true,
+        ".git/config": true
+    },
+    "editor.formatOnSave": true,
+    "files.autoSave": "onFocusChange",
+    "git.openRepositoryInParentFolders": "always",
+    "git.showActionButton": {
+        "commit": true,
+        "publish": false,
+        "sync": false
+    },
+    "git.confirmSync": true,
+    "git.allowNoVerifyCommit": false,
+    "git.postCommitCommand": "none"
+}

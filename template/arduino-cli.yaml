@@ -1,0 +1,33 @@
+board_manager:
+    additional_urls:
+        - https://dl.espressif.com/dl/package_esp32_index.json
+        - https://github.com/stm32duino/BoardManagerFiles/raw/main/package_stmicroelectronics_index.json
+build_cache:
+    compilations_before_purge: 10
+    ttl: 720h0m0s
+daemon:
+    port: "50051"
+directories:
+    builtin:
+        libraries: /home/bernd/.arduino15/libraries
+    data: /home/bernd/.arduino15
+    downloads: /home/bernd/.arduino15/staging
+    user: /home/bernd/Arduino
+library:
+    enable_unsafe_install: false
+locale: en
+logging:
+    file: ""
+    format: text
+    level: info
+metrics:
+    addr: :9090
+    enabled: true
+output:
+    no_color: false
+sketch:
+    fqbn: arduino:avr:uno
+    port: /dev/ttyACM0
+    always_export_binaries: false
+updater:
+    enable_notification: true

@@ -1,0 +1,51 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+student=$(git config --get mct.student 2>/dev/null || true)
+if [[ -z "$student" || "$student" == "UNCONFIGURED" ]]; then
+    echo "ERROR: mct.student is not configured." >&2
+    echo "       On Bunny it is generated from rollout.csv (forgejo)." >&2
+    echo "       On another machine run: ./_config/setup.sh --student <forgejo-login>" >&2
+    exit 1
+fi
+
+# The teacher account is intentionally unrestricted. This is also the repair
+# path when Bernd has to fix a student's repository during class.
+if [[ "$student" == "donner" ]]; then
+    exit 0
+fi
+
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+if [[ -z "$branch" ]]; then
+    echo "ERROR: Commit rejected: detached HEAD." >&2
+    exit 1
+fi
+
+if [[ "$branch" != "$student" ]]; then
+    echo "ERROR: Commit rejected." >&2
+    echo "       This machine belongs to '$student', but the current branch is '$branch'." >&2
+    echo "       Expected branch: $student" >&2
+    exit 1
+fi
+
+bad=0
+while IFS= read -r -d '' path; do
+    case "$path" in
+        "$student"/*) ;;
+        *)
+            if [[ $bad -eq 0 ]]; then
+                echo "ERROR: Commit rejected." >&2
+                echo "       You may only commit changes below '$student/'." >&2
+                echo "       Forbidden staged paths:" >&2
+            fi
+            printf '         %s\n' "$path" >&2
+            bad=1
+            ;;
+    esac
+done < <(git diff --cached --name-only --no-renames -z)
+
+if [[ $bad -ne 0 ]]; then
+    echo "" >&2
+    echo "Unstage/fix these paths and commit again." >&2
+    exit 1
+fi

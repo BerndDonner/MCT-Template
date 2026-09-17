@@ -1,0 +1,16 @@
+{
+    "files.exclude": {
+        "**/.git": false
+    },
+    "editor.formatOnSave": true,
+    "files.autoSave": "onFocusChange",
+    "git.openRepositoryInParentFolders": "always",
+    "git.showActionButton": {
+        "commit": true,
+        "publish": false,
+        "sync": false
+    },
+    "git.confirmSync": true,
+    "git.allowNoVerifyCommit": false,
+    "git.postCommitCommand": "none"
+}

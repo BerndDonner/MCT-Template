@@ -1,0 +1,110 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+yes=0
+target=""
+for arg in "$@"; do
+    case "$arg" in
+        --yes|-y) yes=1 ;;
+        -*) echo "ERROR: unknown option: $arg" >&2; exit 2 ;;
+        *)
+            if [[ -n "$target" ]]; then
+                echo "ERROR: only one student may be specified." >&2
+                exit 2
+            fi
+            target=$arg
+            ;;
+    esac
+done
+
+root=$(git rev-parse --show-toplevel 2>/dev/null) || {
+    echo "ERROR: not inside a Git repository." >&2
+    exit 1
+}
+cd "$root"
+
+configured=$(git config --get mct.student 2>/dev/null || true)
+if [[ -z "$target" ]]; then
+    if [[ -z "$configured" || "$configured" == "UNCONFIGURED" || "$configured" == "donner" ]]; then
+        echo "ERROR: specify the student explicitly: git repair-student <forgejo-login>" >&2
+        exit 1
+    fi
+    target=$configured
+fi
+if [[ ! "$target" =~ ^[A-Za-z0-9._-]+$ || "$target" == "donner" ]]; then
+    echo "ERROR: invalid student '$target'." >&2
+    exit 1
+fi
+
+# Return to a stable branch state first. upmaster itself only starts from a
+# clean tree, so aborting a failed rebase is the safest recovery baseline.
+git abort-op >/dev/null 2>&1 || true
+branch=$(git symbolic-ref --quiet --short HEAD 2>/dev/null || true)
+if [[ "$branch" != "$target" ]]; then
+    echo "ERROR: current branch is '${branch:-<detached>}', expected '$target'." >&2
+    exit 1
+fi
+
+if [[ $yes -ne 1 ]]; then
+    cat <<EOF2
+RECOVERY PLAN for '$target':
+  - preserve the current '$target/' directory (including uncommitted files)
+  - create a local rescue/<student>-<timestamp> branch at the current HEAD
+  - reset '$target' to the current origin/master
+  - restore only '$target/' and commit its resulting state
+  - force-push with --force-with-lease to origin/$target
+
+Changes outside '$target/' are intentionally discarded if tracked.
+Untracked files outside '$target/' are left untouched.
+EOF2
+    read -r -p "Type '$target' to continue: " answer
+    if [[ "$answer" != "$target" ]]; then
+        echo "Aborted."
+        exit 1
+    fi
+fi
+
+tmp=$(mktemp -d "${TMPDIR:-/tmp}/mct-repair.XXXXXX")
+cleanup() { rm -rf "$tmp"; }
+trap cleanup EXIT
+
+if [[ -d "$target" ]]; then
+    cp -a "$target" "$tmp/student"
+fi
+
+git fetch origin --prune
+git show-ref --verify --quiet refs/remotes/origin/master || {
+    echo "ERROR: origin/master does not exist." >&2
+    exit 1
+}
+git show-ref --verify --quiet "refs/remotes/origin/$target" || {
+    echo "ERROR: origin/$target does not exist." >&2
+    exit 1
+}
+
+stamp=$(date +%Y%m%d-%H%M%S)
+rescue="rescue/$target-$stamp"
+git branch "$rescue" HEAD
+
+echo "Created local rescue branch: $rescue"
+
+git reset --hard origin/master
+rm -rf -- "$target"
+if [[ -d "$tmp/student" ]]; then
+    cp -a "$tmp/student" "$target"
+else
+    mkdir -p "$target"
+fi
+
+git add -A -- "$target"
+if ! git diff --cached --quiet; then
+    git commit -m "Recovery: preserve $target work"
+else
+    echo "INFO: '$target/' has no content differing from origin/master; no recovery commit needed."
+fi
+
+git push --force-with-lease origin "HEAD:refs/heads/$target"
+bash _config/setup.sh --refresh
+
+echo "OK: rebuilt '$target' on origin/master."
+echo "    Previous committed history is still available locally as '$rescue'."

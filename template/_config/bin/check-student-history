@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+if [[ $# -ne 3 ]]; then
+    echo "usage: check-student-history <base-ref> <target-ref> <student>" >&2
+    exit 2
+fi
+
+base=$1
+target=$2
+student=$3
+
+# Merge commits make the simple linear classroom model ambiguous and should
+# not occur on student branches.
+merge=$(git rev-list --merges "$base..$target" | head -n 1 || true)
+if [[ -n "$merge" ]]; then
+    echo "ERROR: Student history contains a merge commit: $merge" >&2
+    echo "       Ask the teacher for recovery instead of continuing upmaster." >&2
+    exit 1
+fi
+
+bad=0
+while IFS= read -r commit; do
+    [[ -n "$commit" ]] || continue
+    while IFS= read -r -d '' path; do
+        case "$path" in
+            "$student"/*) ;;
+            *)
+                if [[ $bad -eq 0 ]]; then
+                    echo "ERROR: Student history violates the path rule." >&2
+                fi
+                printf '  %s  %s\n' "${commit:0:12}" "$path" >&2
+                bad=1
+                ;;
+        esac
+    done < <(git diff-tree --root --no-commit-id --name-only -r --no-renames -z "$commit")
+done < <(git rev-list --reverse "$base..$target")
+
+if [[ $bad -ne 0 ]]; then
+    echo "" >&2
+    echo "Only '$student/**' may be changed by commits unique to the student branch." >&2
+    echo "Use the teacher recovery tools; upmaster has made no history changes." >&2
+    exit 1
+fi
