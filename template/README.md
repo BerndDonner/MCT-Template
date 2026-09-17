@@ -51,12 +51,10 @@ The setup script:
 1. adds `_config/gitconfig` to the repository-local Git configuration,
 2. activates `_config/hooks/pre-commit`,
 3. creates the local `.vscode/` configuration,
-4. installs `_config/continue/config.yaml` to `~/.continue/config.yaml`,
-5. creates the student's local (initially untracked) work folder.
+4. creates the student's local (initially untracked) work folder.
 
-The Continue file in `_config/continue/` is the versioned source of truth for
-the MCT environment. `setup.sh` copies it to the user's home as a normal
-writable file. It intentionally replaces a Continue-generated default config.
+`setup.sh` deliberately does not touch `~/.continue`; Continue configuration is
+managed independently from the course repository.
 
 `.vscode/` is intentionally ignored because the writable path is different for
 each student.
@@ -191,7 +189,6 @@ student's remote branch.
 │   └── .gitkeep
 ├── .gitignore
 ├── Makefile
-├── arduino-cli.yaml
 ├── flake.nix
 └── flake.lock
 ```

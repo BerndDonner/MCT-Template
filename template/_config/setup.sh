@@ -75,11 +75,6 @@ git config --local core.hooksPath _config/hooks
 mkdir -p .vscode
 cp _config/launch.json .vscode/launch.json
 
-# Continue may create its own default config on first extension start. The MCT
-# repository is authoritative for the classroom configuration, so install our
-# version as a normal writable user file (not a Nix-store symlink).
-install -Dm0644 _config/continue/config.yaml "$HOME/.continue/config.yaml"
-
 if [[ "$student" == "donner" ]]; then
     cp _config/settings.teacher.json .vscode/settings.json
 else
@@ -92,7 +87,6 @@ cat <<EOF2
   mct.student : $student
   hooks       : _config/hooks
   VS Code     : .vscode/settings.json
-  Continue    : ~/.continue/config.yaml
 EOF2
 
 if [[ "$student" != "donner" ]]; then

@@ -2,8 +2,8 @@
 
 This repository is the **single canonical source** for the MCT classroom
 repositories. `MCT_I3A` and `MCT_E3A` are generated from exactly the same
-`template/` tree. Class-specific copies of `_config`, hooks, VS Code settings
-or the Continue configuration are never maintained by hand.
+`template/` tree. Class-specific copies of `_config`, hooks, or VS Code settings
+are never maintained by hand.
 
 The generated repositories live permanently below `dist/` and are independent
 Git repositories with their own `.git` directories:
@@ -206,12 +206,10 @@ MCT-Template/
     ├── donner/
     ├── .gitignore
     ├── Makefile
-    ├── arduino-cli.yaml
     ├── flake.nix
     └── flake.lock
 ```
 
 `template/_config/setup.sh` installs the repository-local Git configuration,
-hooks and VS Code protection. It also copies the versioned Continue template to
-`~/.continue/config.yaml` as a normal writable file; the active Continue file
-is therefore not a symlink into the Nix store.
+hooks and VS Code protection. It deliberately does not touch the user's
+Continue configuration.
