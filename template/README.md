@@ -54,7 +54,7 @@ The setup script:
 4. creates the student's local (initially untracked) work folder.
 
 `setup.sh` deliberately does not touch `~/.continue`; Continue configuration is
-managed independently from the course repository.
+managed during golden-image finalization in NixOS-Bunny, not by a course repository.
 
 `.vscode/` is intentionally ignored because the writable path is different for
 each student.
@@ -184,7 +184,6 @@ student's remote branch.
 │   ├── settings.student.json.in
 │   ├── settings.teacher.json
 │   ├── launch.json
-│   └── continue/config.yaml
 ├── donner/
 │   └── .gitkeep
 ├── .gitignore

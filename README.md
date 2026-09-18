@@ -197,7 +197,6 @@ MCT-Template/
     ├── _config/
     │   ├── bin/
     │   ├── hooks/
-    │   ├── continue/config.yaml
     │   ├── gitconfig
     │   ├── launch.json
     │   ├── settings.student.json.in
@@ -211,5 +210,5 @@ MCT-Template/
 ```
 
 `template/_config/setup.sh` installs the repository-local Git configuration,
-hooks and VS Code protection. It deliberately does not touch the user's
-Continue configuration.
+hooks and VS Code protection. Continue configuration is not part of the course
+template and is managed during golden-image finalization in NixOS-Bunny.
