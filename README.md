@@ -5,21 +5,19 @@ repositories. `MCT_I3A` and `MCT_E3A` are generated from exactly the same
 `template/` tree. Class-specific copies of `_config`, hooks, or VS Code settings
 are never maintained by hand.
 
-The generated repositories live permanently below `dist/` and are independent
-Git repositories with their own `.git` directories:
+The generated course repositories are independent siblings of this template
+repository below the shared `repos/` directory:
 
 ```text
-MCT-Template/                 # Git repo 1
-├── .git/
-├── template/                 # canonical source
-├── scripts/course.py
-└── dist/                     # ignored by the template repo
-    ├── MCT_I3A/.git/         # Git repo 2
-    └── MCT_E3A/.git/         # Git repo 3
+repos/
+├── MCT-Template/.git/        # template/generator repository
+├── MCT_I3A/.git/             # independent course repository
+└── MCT_E3A/.git/             # independent course repository
 ```
 
-`dist/` is ignored by the outer template repository, so the three repositories
-can stay nested at these exact paths without interfering with one another.
+This keeps the long-lived course repositories independent from the template.
+The template is mainly used to bootstrap a school year; later the class
+repositories may intentionally diverge and keep their own histories.
 
 ## Fixed Git topology
 
@@ -116,7 +114,7 @@ python3 scripts/course.py update E3A
 After an update, inspect the concrete class-specific result normally:
 
 ```bash
-cd dist/MCT_I3A
+cd ../MCT_I3A
 git status
 git diff
 ```

@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 """Create, update and publish the generated MCT course repositories.
 
-The canonical source lives in ../template. Generated repositories stay in
-../dist permanently and have their own .git directory.
+The canonical source lives in ../template. Generated repositories live as
+sibling repositories below ../../ (the shared repos/ directory) and have their
+own .git directory.
 """
 
 from __future__ import annotations
@@ -20,7 +21,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 TEMPLATE = ROOT / "template"
-DIST = ROOT / "dist"
+REPOS_ROOT = ROOT.parent
 DEFAULT_BRANCH = "master"
 MARKER_RE = re.compile(r"@[A-Z][A-Z0-9_]*@")
 
@@ -86,7 +87,7 @@ def targets(key: str) -> list[Course]:
 
 
 def destination(course: Course) -> Path:
-    return DIST / course.repo_name
+    return REPOS_ROOT / course.repo_name
 
 
 def substitute_tree(root: Path, course: Course) -> None:
@@ -160,7 +161,7 @@ def create(course: Course) -> None:
             "Use 'update' for an existing generated repository."
         )
 
-    DIST.mkdir(parents=True, exist_ok=True)
+    REPOS_ROOT.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="mct-render-") as tmp:
         rendered = render(course, Path(tmp))
         shutil.move(str(rendered), repo)
