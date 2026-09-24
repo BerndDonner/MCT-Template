@@ -1,0 +1,331 @@
+name: Restrict student commits
+
+on:
+  push:
+    # Nur Branch-Pushes; Tags sind fuer diese Regel irrelevant.
+    branches:
+      - '**'
+
+  # Manueller Audit vorhandener Schuelerbranches / Commits.
+  workflow_dispatch:
+    inputs:
+      student:
+        description: 'Forgejo-Login = Branch = Verzeichnis des Schuelers'
+        required: true
+        type: string
+      commit:
+        description: 'Optional: einzelner Commit-SHA; leer = kompletter aktueller Schuelerbranch gegen master'
+        required: false
+        default: ''
+        type: string
+
+jobs:
+  pathcheck:
+    name: Restrict student branch and paths
+    runs-on: mct-check
+
+    # Bei einer Branch-Loeschung gibt es keinen neuen Commit zu pruefen.
+    # workflow_dispatch bleibt davon unberuehrt.
+    if: forgejo.event_name == 'workflow_dispatch' || forgejo.sha != '0000000000000000000000000000000000000000'
+
+    steps:
+      - name: Checkout repository
+        uses: https://data.forgejo.org/actions/checkout@v6
+        with:
+          # Wir brauchen die Historie fuer merge-base und historische Audits.
+          fetch-depth: 0
+
+      # Ein Lehrer-Push auf einen Schuelerbranch ist erlaubt, soll aber in der
+      # Actions-Ansicht deutlich als Ausnahme/Reparatur auffallen.
+      # Bei einem manuellen Audit ist 'donner' nur der Ausloeser und KEINE
+      # Lehrer-Reparatur; deshalb ist dieser Step auf push beschraenkt.
+      - name: "⚠️ Lehrer-Reparatur auf Schülerbranch"
+        if: forgejo.event_name == 'push' && forgejo.actor == 'donner' && forgejo.ref_name != 'master'
+        shell: bash
+        env:
+          ACTOR: ${{ forgejo.actor }}
+          BRANCH: ${{ forgejo.ref_name }}
+        run: |
+          set -euo pipefail
+          echo "##[group]⚠️ Lehrer-Reparatur"
+          echo "Lehrer '$ACTOR' schreibt auf den Schülerbranch '$BRANCH'."
+          echo "Dieser Push ist ausdrücklich erlaubt; die Schüler-Pfadregel wird übersprungen."
+          echo "##[endgroup]"
+
+      - name: Check branch and changed paths
+        shell: bash
+        env:
+          EVENT_NAME: ${{ forgejo.event_name }}
+          FORGEJO_ACTOR_NAME: ${{ forgejo.actor }}
+          PUSH_BRANCH: ${{ forgejo.ref_name }}
+          PUSH_REF: ${{ forgejo.ref }}
+          PUSH_SHA: ${{ forgejo.sha }}
+          AUDIT_STUDENT: ${{ inputs.student }}
+          AUDIT_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+
+          readonly TEACHER='donner'
+          readonly MASTER='master'
+
+          # Diese Variablen werden fuer Push und Audit auf dieselbe Bedeutung
+          # normalisiert. Ab hier kann die eigentliche Pfadpruefung gemeinsam
+          # verwendet werden.
+          ACTOR=''
+          BRANCH=''
+          AFTER=''
+          MODE=''
+          SINGLE_COMMIT=''
+
+          echo "📦 Event:    $EVENT_NAME"
+          echo "👤 Auslöser: $FORGEJO_ACTOR_NAME"
+          echo
+
+          case "$EVENT_NAME" in
+            push)
+              MODE='push'
+              ACTOR="$FORGEJO_ACTOR_NAME"
+              BRANCH="$PUSH_BRANCH"
+              AFTER="$PUSH_SHA"
+
+              echo "👤 Benutzer: $ACTOR"
+              echo "🌿 Branch:   $BRANCH"
+              echo "🔖 Ref:      $PUSH_REF"
+              echo "📌 Commit:   $AFTER"
+              echo
+
+              # Defensive Kontrolle: Durch on.push.branches sollten hier nur
+              # Branch-Pushes ankommen.
+              case "$PUSH_REF" in
+                refs/heads/*) ;;
+                *)
+                  echo "ℹ️ Kein Branch-Push – keine Pfadprüfung erforderlich."
+                  exit 0
+                  ;;
+              esac
+
+              # Lehrer darf ueberall schreiben. Auf einem Schuelerbranch hat
+              # der vorherige Step die Reparatur bereits sichtbar markiert.
+              if [[ "$ACTOR" == "$TEACHER" ]]; then
+                if [[ "$BRANCH" == "$MASTER" ]]; then
+                  echo "🧑‍🏫 Lehrer auf '$MASTER' – Schreiben überall erlaubt."
+                else
+                  echo "⚠️ Lehrer-Reparatur auf '$BRANCH' – Schreiben überall erlaubt."
+                fi
+                exit 0
+              fi
+
+              # Schueler: Forgejo-Login == Branchname == persoenliches Verzeichnis.
+              if [[ "$BRANCH" == "$MASTER" ]]; then
+                echo "❌ Schüler dürfen nicht auf '$MASTER' pushen."
+                exit 1
+              fi
+
+              if [[ "$BRANCH" != "$ACTOR" ]]; then
+                echo "❌ Falscher Branch."
+                echo "   Forgejo-Login : $ACTOR"
+                echo "   Push-Branch   : $BRANCH"
+                echo "   Erlaubt       : $ACTOR"
+                exit 1
+              fi
+              ;;
+
+            workflow_dispatch)
+              MODE='audit'
+              ACTOR="$AUDIT_STUDENT"
+              BRANCH="$AUDIT_STUDENT"
+              SINGLE_COMMIT="$AUDIT_COMMIT"
+
+              if [[ -z "$ACTOR" ]]; then
+                echo "❌ Audit: 'student' darf nicht leer sein."
+                exit 1
+              fi
+
+              if [[ "$ACTOR" == "$MASTER" || "$ACTOR" == "$TEACHER" ]]; then
+                echo "❌ Audit: '$ACTOR' ist kein Schülername."
+                exit 1
+              fi
+
+              # Forgejo-Login = Branchname. Dadurch darf die Eingabe keine
+              # beliebige Refspec sein; zugleich pruefen wir die Branch-Syntax.
+              if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
+                echo "❌ Audit: '$BRANCH' ist kein gültiger Branchname."
+                exit 1
+              fi
+
+              echo "##[group]🔎 Manueller Schüler-Audit"
+              echo "Geprüfter Schüler : $ACTOR"
+              echo "Geprüfter Branch  : $BRANCH"
+              if [[ -n "$SINGLE_COMMIT" ]]; then
+                echo "Geprüfter Commit  : $SINGLE_COMMIT"
+              else
+                echo "Geprüfter Bereich : kompletter aktueller Branch gegen '$MASTER'"
+              fi
+              echo "##[endgroup]"
+              echo
+              ;;
+
+            *)
+              echo "❌ Unerwarteter Event-Typ: $EVENT_NAME"
+              exit 1
+              ;;
+          esac
+
+          # master explizit nachladen. Das macht die Vergleichsbasis eindeutig
+          # und funktioniert auch nach Rebase und Force-Push.
+          echo "ℹ️ Lade '$MASTER' als Vergleichsbasis ..."
+          git fetch --no-tags origin \
+            "+refs/heads/${MASTER}:refs/remotes/origin/${MASTER}"
+
+          if [[ "$MODE" == 'audit' ]]; then
+            # Auch der zu pruefende Schuelerbranch wird explizit geladen. Damit
+            # ist der Audit unabhaengig davon, auf welchem Ref workflow_dispatch
+            # selbst gestartet wurde.
+            echo "ℹ️ Lade Schülerbranch '$BRANCH' ..."
+            if ! git fetch --no-tags origin \
+              "+refs/heads/${BRANCH}:refs/remotes/origin/${BRANCH}"; then
+              echo "❌ Audit: Branch '$BRANCH' existiert auf origin nicht."
+              exit 1
+            fi
+
+            readonly STUDENT_REF="refs/remotes/origin/${BRANCH}"
+
+            if [[ -n "$SINGLE_COMMIT" ]]; then
+              # Akzeptiere SHA / eindeutige Commit-ID, aber nur wenn sie als
+              # Commit aufgeloest werden kann und in diesem Schuelerbranch liegt.
+              if ! AFTER=$(git rev-parse --verify "${SINGLE_COMMIT}^{commit}" 2>/dev/null); then
+                echo "❌ Audit: '$SINGLE_COMMIT' ist kein verfügbarer Commit."
+                exit 1
+              fi
+
+              if ! git merge-base --is-ancestor "$AFTER" "$STUDENT_REF"; then
+                echo "❌ Audit: Commit '$AFTER' gehört nicht zur Historie von '$BRANCH'."
+                exit 1
+              fi
+            else
+              AFTER=$(git rev-parse --verify "${STUDENT_REF}^{commit}")
+            fi
+          fi
+
+          if ! git cat-file -e "${AFTER}^{commit}" 2>/dev/null; then
+            echo "❌ Ziel-Commit '$AFTER' ist lokal nicht verfügbar."
+            exit 1
+          fi
+
+          changed_count=0
+          violations=()
+          violation_commits=()
+
+          if [[ "$MODE" == 'audit' && -n "$SINGLE_COMMIT" ]]; then
+            # Einzelcommit-Audit: Nur genau die durch diesen Commit eingefuehrten
+            # Pfadaenderungen pruefen. Fuer einen Root-Commit funktioniert
+            # diff-tree --root ebenfalls ohne Sonderfall.
+            echo "📄 Durch Commit '$AFTER' veränderte Pfade:"
+
+            while IFS= read -r -d '' path; do
+              ((changed_count += 1))
+              printf '  %q\n' "$path"
+
+              case "$path" in
+                "$ACTOR"/*) ;;
+                *)
+                  violations+=("$path")
+                  violation_commits+=("$(git rev-parse --short=12 "$AFTER")")
+                  ;;
+              esac
+            done < <(
+              git -c core.quotepath=off diff-tree \
+                --root \
+                --no-commit-id \
+                --no-renames \
+                --name-only \
+                -r \
+                -z \
+                "$AFTER"
+            )
+          else
+            # Normaler Push und kompletter Branch-Audit: NICHT nur den
+            # Endzustand des Branches vergleichen. Wir pruefen jeden Commit,
+            # der auf dem Schuelerbranch liegt, aber nicht auf master. Dadurch
+            # wird auch eine unerlaubte Aenderung erkannt, die ein spaeterer
+            # Commit wieder rueckgaengig gemacht hat.
+            BASE=$(git merge-base "refs/remotes/origin/${MASTER}" "$AFTER" || true)
+            if [[ -z "$BASE" ]]; then
+              echo "❌ Kein gemeinsamer Vorfahr mit '$MASTER' gefunden."
+              echo "   Der Schülerbranch muss von '$MASTER' abstammen."
+              exit 1
+            fi
+
+            mapfile -t STUDENT_COMMITS < <(
+              git rev-list --reverse "refs/remotes/origin/${MASTER}..${AFTER}"
+            )
+
+            echo "🔗 Gemeinsame Basis mit '$MASTER': $BASE"
+            echo "🧾 Zu prüfende Schülercommits: ${#STUDENT_COMMITS[@]}"
+            echo
+
+            if (( ${#STUDENT_COMMITS[@]} == 0 )); then
+              echo "✅ Keine Schülercommits gegenüber '$MASTER' vorhanden."
+              exit 0
+            fi
+
+            echo "📄 Von diesen Schülercommits veränderte Pfade:"
+
+            # NUL-separierte Pfade vermeiden Probleme mit Leerzeichen und
+            # Zeilenumbruechen in Dateinamen. --no-renames ist absichtlich
+            # gesetzt: Verschieben einer fremden Datei wird als Loeschen am
+            # alten Ort + Hinzufuegen am neuen Ort sichtbar.
+            for commit in "${STUDENT_COMMITS[@]}"; do
+              short_commit=$(git rev-parse --short=12 "$commit")
+              echo "  Commit $short_commit"
+
+              while IFS= read -r -d '' path; do
+                ((changed_count += 1))
+                printf '    %q\n' "$path"
+
+                case "$path" in
+                  "$ACTOR"/*) ;;
+                  *)
+                    violations+=("$path")
+                    violation_commits+=("$short_commit")
+                    ;;
+                esac
+              done < <(
+                git -c core.quotepath=off diff-tree \
+                  --root \
+                  --no-commit-id \
+                  --no-renames \
+                  --name-only \
+                  -r \
+                  -z \
+                  "$commit"
+              )
+            done
+          fi
+
+          if (( changed_count == 0 )); then
+            echo "  (keine)"
+            echo
+            echo "✅ Keine zu prüfenden Änderungen gefunden."
+            exit 0
+          fi
+
+          echo
+
+          if (( ${#violations[@]} > 0 )); then
+            echo "❌ Nicht erlaubte Änderungen gefunden."
+            echo "   Erlaubt ist ausschließlich: ${ACTOR}/"
+            echo
+            echo "🚫 Nicht erlaubte Pfade:"
+            for i in "${!violations[@]}"; do
+              printf '  Commit %s: ' "${violation_commits[$i]}"
+              printf '%q\n' "${violations[$i]}"
+            done
+            exit 1
+          fi
+
+          if [[ "$MODE" == 'audit' ]]; then
+            echo "✅ Audit bestanden: Alle geprüften Änderungen liegen unter '${ACTOR}/'."
+          else
+            echo "✅ Alle Änderungen liegen unter '${ACTOR}/'."
+          fi
